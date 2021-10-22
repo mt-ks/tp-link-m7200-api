@@ -1,0 +1,11 @@
+{
+  "name": "tp-link-m7200-api",
+  "version": "1.0.0",
+  "devDependencies": {
+    "jsbn": "^1.1.0"
+  },
+  "dependencies": {
+    "axios": "^0.23.0",
+    "crypto-js": "^4.1.1"
+  }
+}
