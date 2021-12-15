@@ -1,15 +1,17 @@
 {
-    "require": {
-        "mehmetbeyhz/mclient": "dev-master",
-      "ext-curl": "*",
-      "ext-json": "*",
-      "ext-openssl": "*",
-        "paragonie/easyrsa": "^0.6.0",
-        "mehmetbeyhz/easy-json-mapper": "dev-master"
-    },
-    "autoload": {
-        "psr-4": {
-            "TPLink\\" : "src"
-        }
+  "name": "mehmetbeyhz/tp-link-m7200-api",
+  "description": "TPLink modem API",
+  "require": {
+    "mehmetbeyhz/mclient": "dev-master",
+    "ext-curl": "*",
+    "ext-json": "*",
+    "ext-openssl": "*",
+    "paragonie/easyrsa": "^0.6.0",
+    "mehmetbeyhz/easy-json-mapper": "dev-master"
+  },
+  "autoload": {
+    "psr-4": {
+      "TPLink\\": "src"
     }
+  }
 }
