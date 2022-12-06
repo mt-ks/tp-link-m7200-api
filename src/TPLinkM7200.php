@@ -1,5 +1,8 @@
 <?php
+
 namespace TPLink;
+
+use JsonException;
 use MClient\Request;
 use TPLink\model\EncryptAes;
 use TPLink\model\FetchAuthCgi;
@@ -12,22 +15,23 @@ class TPLinkM7200
     public ?FetchAuthCgi $authCgiInfo = null;
     protected EncryptAes $encryptAes;
     protected $password;
-    public function __construct($password,$gateway = null){
 
+    public function __construct($password, $gateway = null)
+    {
         $this->gateway = $gateway ?? $this->gateway;
         $this->password = $password;
     }
 
     /**
-     * @return \TPLink\model\FetchAuthCgi|null
-     * @throws \JsonException
+     * @return FetchAuthCgi|null
+     * @throws JsonException
      */
     public function createLoginTokens(): ?FetchAuthCgi
     {
         $req = (new Request("http://" . $this->gateway . "/cgi-bin/auth_cgi"))
-            ->addPost("data",base64_encode(json_encode(["module" => "authenticator","action" => 0], JSON_THROW_ON_ERROR)))
+            ->addPost("data", base64_encode(json_encode(["module" => "authenticator", "action" => 0], JSON_THROW_ON_ERROR)))
             ->setUserAgent('okhttp/3.11.0')
-            ->addHeader('content-type','application/json')
+            ->addHeader('content-type', 'application/json')
             ->setJsonPost(true)
             ->execute()
             ->getResponse();
@@ -37,27 +41,27 @@ class TPLinkM7200
     }
 
     /**
-     * @return \TPLink\model\LoginResponse
-     * @throws \JsonException
+     * @return LoginResponse
+     * @throws JsonException
      */
     public function authentication(): LoginResponse
     {
         $this->createLoginTokens();
         $encryption = new Encryption();
-        $buildDigest = md5($this->password.':'.$this->authCgiInfo->getNonce());
+        $buildDigest = md5($this->password . ':' . $this->authCgiInfo->getNonce());
         $data = $encryption->encryptAES(json_encode(['module' => 'authenticator', 'action' => 1, 'digest' => $buildDigest], JSON_THROW_ON_ERROR));
         $this->encryptAes = $data;
         $rsaData = [
             'key' => $data->getKey(),
             'iv' => $data->getIv(),
-            'h' => md5('admin'.$this->password),
+            'h' => md5('admin' . $this->password),
             's' => (int)$this->authCgiInfo->getSeqnum() + (int)strlen($data->getEncryptedData()),
         ];
-        $sign = $encryption->encryptRSA(http_build_query($rsaData),$this->authCgiInfo->getRsamod(),$this->authCgiInfo->getRsapubkey());
+        $sign = $encryption->encryptRSA(http_build_query($rsaData), $this->authCgiInfo->getRsamod(), $this->authCgiInfo->getRsapubkey());
 
         $response = $this->request("/cgi-bin/auth_cgi")
-            ->addPost('data',$data->getEncryptedData())
-            ->addPost('sign',$sign)
+            ->addPost('data', $data->getEncryptedData())
+            ->addPost('sign', $sign)
             ->setJsonPost(true)
             ->execute()
             ->getResponse();
@@ -65,29 +69,52 @@ class TPLinkM7200
         return new LoginResponse(json_decode($encryption->decryptAES($response, $data->getKey(), $data->getIv()), true, 512, JSON_THROW_ON_ERROR));
     }
 
-    public function rebootDevice($token){
-        $data = json_encode([
+    public function request($endpoint): Client
+    {
+        return new Client("http://" . $this->gateway . $endpoint, $this);
+    }
+
+    /**
+     * @throws JsonException
+     */
+    public function invokeAction($token, $module, $action, $data = null)
+    {
+        $dataArr = [
             'token' => $token,
-            'module' => 'reboot',
-            'action' => 0
-        ], JSON_THROW_ON_ERROR);
-        $encrypt = openssl_encrypt($data,"aes-128-cbc",$this->encryptAes->getKey(),0,$this->encryptAes->getIv());
+            'module' => $module,
+            'action' => $action
+        ];
+        if (!is_null($data)) {
+            $dataArr['data'] = $data;
+        }
+
+        $encrypt = openssl_encrypt(
+            json_encode($dataArr, JSON_THROW_ON_ERROR),
+            "aes-128-cbc",
+            $this->encryptAes->getKey(),
+            0,
+            $this->encryptAes->getIv()
+        );
         $rsaData = [
-            'h' => md5('admin'.$this->password),
+            'h' => md5('admin' . $this->password),
             's' => (int)$this->authCgiInfo->getSeqnum() + (int)strlen($encrypt)
         ];
-        $sign = (new Encryption())->encryptRSA(http_build_query($rsaData),$this->authCgiInfo->getRsamod(),$this->authCgiInfo->getRsapubkey());
+        $sign = (new Encryption())->encryptRSA(http_build_query($rsaData), $this->authCgiInfo->getRsamod(), $this->authCgiInfo->getRsapubkey());
         $response = $this->request("/cgi-bin/web_cgi")
-            ->addPost('data',$encrypt)
-            ->addPost('sign',$sign)
+            ->addPost('data', $encrypt)
+            ->addPost('sign', $sign)
             ->setJsonPost(true)
             ->execute()
             ->getResponse();
-        print_r((new Encryption())->decryptAES($response,$this->encryptAes->getKey(),$this->encryptAes->getIv()));
+        return (new Encryption())->decryptAES($response, $this->encryptAes->getKey(), $this->encryptAes->getIv());
     }
 
-    public function request($endpoint){
-        return new Client("http://" . $this->gateway.$endpoint,$this);
+    /**
+     * @throws JsonException
+     */
+    public function rebootDevice($token)
+    {
+        print_r($this->invokeAction($token, 'reboot', 0));
     }
 
 }
